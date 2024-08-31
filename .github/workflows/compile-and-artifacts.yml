@@ -2,7 +2,7 @@ name: Build and upload artifacts
 
 on:
   push:
-    branches: [ master ]
+    branches: [ master, build-tests ]
   pull_request:
     branches: [ master ]
 
@@ -89,9 +89,9 @@ jobs:
       run: | # unfortunately, the folder name convention is slightly different here
         C:\msys64\usr\bin\wget.exe https://puredata.info/downloads/pure-data/releases/${{ env.PD_VERSION }}-pd64/Pd64-${{ env.PD_VERSION }}.msw.zip
         unzip Pd64-${{ env.PD_VERSION }}.msw.zip
-        for /d %%x in (Pd-*) do (
-          ren "%%x" "pd-${{ env.PD_VERSION }}"
-        )
+        Get-ChildItem -Directory -Filter 'Pd-0.*' | ForEach-Object {
+          Rename-Item $_.FullName "pd-${{ env.PD_VERSION }}"
+        }
 
     - name: make 32-bit
       run: make install objectsdir=./build PDDIR=./pd-${{ env.PD_VERSION }} PDINCLUDEDIR=./pd-${{ env.PD_VERSION }}/src PDBINDIR=./pd-${{ env.PD_VERSION }}/bin floatsize=${{ matrix.floatsize }} extension=windows-amd64-${{ matrix.floatsize }}.dll
