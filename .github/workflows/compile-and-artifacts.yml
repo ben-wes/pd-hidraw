@@ -3,6 +3,7 @@ name: Build and upload artifacts
 on:
   push:
     branches: [ master, build-tests ]
+    tags: [ '*' ]
   pull_request:
     branches: [ master ]
 
