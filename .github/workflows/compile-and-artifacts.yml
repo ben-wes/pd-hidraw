@@ -24,7 +24,10 @@ jobs:
         fetch-depth: 0
 
     - name: install dependencies
-      run: sudo apt install puredata-dev
+      run: |
+        sudo apt-get update
+        sudo apt-get install libudev-dev
+        sudo apt install puredata-dev
 
     - name: make
       run: make install objectsdir=./build floatsize=${{ matrix.floatsize }} extension=linux-amd64-${{ matrix.floatsize }}.so
