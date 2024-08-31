@@ -1,15 +1,15 @@
 name: Build and upload artifacts
 
+env:
+  PD_VERSION: 0.55-0
+  LIBNAME: hidraw
+
 on:
   push:
     branches: [ master, build-tests ]
     tags: [ '*' ]
   pull_request:
     branches: [ master ]
-
-env:
-  PD_VERSION: 0.55-0
-  LIBNAME: hidraw
 
 jobs:
   ubuntu-build:
