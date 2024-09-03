@@ -1,7 +1,6 @@
 #N canvas 190 29 895 670 12;
 #X obj 82 430 hidraw;
-#X obj 93 161 hradio 15 1 0 8 empty empty empty 0 -8 0 10 #fcfcfc #000000
-#000000 0;
+#X obj 93 161 hradio 15 1 0 8 empty empty empty 0 -8 0 10 #fcfcfc #000000 #000000 0;
 #X msg 32 100 listdevices;
 #X listbox 115 515 57 0 0 0 - - - 0;
 #X obj 68 555 unpack 0 0 0 0 0 0 0 0, f 55;
@@ -23,20 +22,15 @@
 #X obj 395 584 change;
 #X obj 448 584 change;
 #X obj 83 459 list prepend 0;
-#X obj 178 432 hradio 15 1 0 2 empty empty empty 0 -8 0 10 #fcfcfc
-#000000 #000000 0;
+#X obj 178 432 hradio 15 1 0 2 empty empty empty 0 -8 0 10 #fcfcfc #000000 #000000 0;
 #N canvas 156 156 563 451 hid-permissions 0;
 #X obj 63 61 inlet;
 #X obj 107 361 pdcontrol;
-#X msg 60 127 browse https://www.google.com/search?q=linux+hid+permissions
-;
-#X msg 88 191 browse https://www.google.com/search?q=macos+hid+permissions
-;
+#X msg 60 127 browse https://www.google.com/search?q=linux+hid+permissions;
+#X msg 88 191 browse https://www.google.com/search?q=macos+hid+permissions;
 #X obj 166 56 inlet;
 #N canvas 407 159 645 318 hidrawonwindows 0;
-#X text 80 129 On Windows [hidraw] can't read from "mouses" or "keyboards".
-Other HIDs (like "gamepads" or "joystcks") should work out of the box.
-, f 66;
+#X text 80 129 On Windows [hidraw] can't read from "mouses" or "keyboards". Other HIDs (like "gamepads" or "joystcks") should work out of the box., f 66;
 #X restore 256 368 pd hidrawonwindows;
 #X f 19;
 #X obj 270 54 inlet;
@@ -53,53 +47,43 @@ Other HIDs (like "gamepads" or "joystcks") should work out of the box.
 #X connect 9 0 1 0;
 #X connect 10 0 9 0;
 #X restore 619 212 pd hid-permissions;
-#X obj 619 131 bng 15 250 50 0 empty empty empty 17 7 0 10 #fcfcfc
-#000000 #000000;
+#X obj 619 131 bng 15 250 50 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000;
 #X text 699 154 macOS;
 #X text 637 130 Linux;
-#X obj 680 155 bng 15 250 50 0 empty empty empty 17 7 0 10 #fcfcfc
-#000000 #000000;
+#X obj 680 155 bng 15 250 50 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000;
 #X text 629 494 1st: <list> raw bytes;
 #X text 628 520 2nd: <float>;
 #X text 659 541 -1 = read error;
 #X text 666 559 1 = waiting;
-#X text 665 576 2 = read Ok;
+#X text 666 577 2 = read Ok;
 #X text 585 470 outlets:;
-#X text 579 332 inlet:;
+#X text 579 312 inlet:;
 #X msg 337 387 poll 0;
 #X text 331 355 poll every <n> milliseconds;
 #X text 400 387 0 to stop polling;
 #X msg 266 353 poll 5;
-#X obj 742 177 bng 15 250 50 0 empty empty empty 17 7 0 10 #fcfcfc
-#000000 #000000;
+#X obj 742 177 bng 15 250 50 0 empty empty empty 17 7 0 10 #fcfcfc #000000 #000000;
 #X text 761 176 Windows;
 #X msg 93 205 open \$1;
 #X msg 240 312 close;
 #X msg 130 249 open-vidpid 2064 1;
-#X text 132 100 <-- first this. it will give the "Pd device enum" to
-use with "open" \, (scroll the console).;
+#X text 132 100 <-- first this. it will give the "Pd device enum" to use with "open" \, (scroll the console).;
 #X floatatom 93 182 5 0 0 0 - - - 0;
 #X msg 158 312 open 0;
 #X text 296 314 close hid;
 #X text 213 311 or;
-#X text 274 221 open device via VID PID (shown in the console if you
-did "listdevices"). Note that the VID PID is hard-coded in the device
-and this can be used (later) without a prior "listdevices" message.
-, f 44;
-#X text 223 154 this opens the corresponding "path" to the "Pd device
-enum". Note that you have to do "listdevices" to fill the internal
-enumeration., f 43;
-#X obj 175 33 cnv 10 300 6 empty empty hidraw 0 0 0 28 #dfdfdf #404040
-0;
+#X text 274 221 open device via VID PID (shown in the console if you did "listdevices"). Note that the VID PID is hard-coded in the device and this can be used (later) without a prior "listdevices" message., f 44;
+#X text 223 154 this opens the corresponding "path" to the "Pd device enum". Note that you have to do "listdevices" to fill the internal enumeration., f 43;
+#X obj 175 33 cnv 10 300 6 empty empty hidraw 0 0 0 28 #dfdfdf #404040 0;
 #X text 305 39 read raw bytes from HIDs;
-#X obj 836 627 bng 15 250 50 0 github empty empty 17 7 0 10 #ffffff
-#000000 #000000;
+#X obj 836 627 bng 15 250 50 0 github empty empty 17 7 0 10 #ffffff #000000 #000000;
 #X text 726 625 github repo -->;
-#X text 617 359 listdevices;
-#X text 620 380 open <float>;
-#X text 621 402 open-vidpid <float> <float>;
-#X text 620 422 close;
-#X text 620 440 poll <float>;
+#X text 617 339 listdevices;
+#X text 617 359 open <float>;
+#X text 617 379 open-vidpid <float> <float>;
+#X text 617 399 close;
+#X text 617 419 poll <float>;
+#X text 617 439 send <list> (for output reports);
 #X connect 0 0 22 0;
 #X connect 1 0 46 0;
 #X connect 2 0 0 0;
