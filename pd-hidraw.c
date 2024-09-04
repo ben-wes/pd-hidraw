@@ -101,7 +101,7 @@ static void hidraw_open(t_hidraw *x, char openmode)
     }
 
     if (!x->handle) {
-        post("hidraw: unable to open device: %ls", hid_error(x->handle));
+        pd_error(x, "hidraw: unable to open device: %ls", hid_error(x->handle));
         x->handle = NULL;
         return;
     }
@@ -132,10 +132,10 @@ static void hidraw_opendevice(t_hidraw *x, t_float hidn)
         hidraw_closedevice(x);
         return;
     } else if (!x->devlistdone) {
-        post("hidraw: devices not listed yet.");
+        pd_error(x, "hidraw: devices not listed yet.");
         return;
     } else if (n > x->ndevices) {
-        post("hidraw: device out range. current count of devices is: %d", x->ndevices);
+        pd_error(x, "hidraw: device out range. current count of devices is: %d", x->ndevices);
         return;
     } else {
         x->targetpath = (char *)x->hidpath[n];
@@ -160,15 +160,15 @@ static void hidraw_listhids(t_hidraw *x)
 
 static void hidraw_poll(t_hidraw *x, t_float f )
 {
-    x->polltime = f; // TODO: add option to continuously output with -1?
-    if (f != 0) clock_delay(x->hidclock, 0);
+    x->polltime = f;
+    if (f > 0) clock_delay(x->hidclock, 0);
     else clock_unset(x->hidclock);
 }
 
-static void hidraw_send(t_hidraw *x, t_symbol *s, int ac, t_atom *av)
+static void hidraw_write(t_hidraw *x, t_symbol *s, int ac, t_atom *av)
 {
     if (!x->handle){
-        post("hidraw: no device opened yet");
+        pd_error(x, "hidraw: no device opened yet");
         return;
     }
 
@@ -180,7 +180,7 @@ static void hidraw_send(t_hidraw *x, t_symbol *s, int ac, t_atom *av)
     x->readlen = hid_send_output_report(x->handle, x->buf, ac);
 
     if (x->readlen < 0) {
-        post("hidraw: unable to write(): %ls", hid_error(x->handle));
+        pd_error(x, "hidraw: unable to write(): %ls", hid_error(x->handle));
     }
     (void)s;
 }
@@ -190,32 +190,24 @@ static void hidraw_tick(t_hidraw *x)
     t_atom out[256];
 
     if (!x->handle){
-        post("hidraw: no device opened yet");
+        pd_error(x, "hidraw: no device opened yet");
         return;
     }
 
-    x->readlen = 0;
-
+    int readlen_last = x->readlen;
     x->readlen = hid_read(x->handle, x->buf, sizeof(x->buf));
 
-    if (x->readlen < 0) {
-        post("hidraw: unable to read(): %ls", hid_error(x->handle));
+    if (x->readlen < 0) { // error
+        if (readlen_last >= 0) pd_error(x, "hidraw: can't read(): %ls. still polling.", hid_error(x->handle));
         outlet_float(x->readstatus, -1);
-        goto polling;
+    } else if (x->readlen == 0) { // waiting...
+        outlet_float(x->readstatus, 1);
+    } else {
+        for(int i = 0; i < x->readlen; i++) SETFLOAT(out+i, x->buf[i]);
+        outlet_float(x->readstatus, 2);
+        outlet_list(x->bytes_out, NULL, x->readlen, out);
     }
 
-    if (x->readlen == 0) {
-        outlet_float(x->readstatus, 1); //waiting...
-        goto polling;
-    }
-
-    for (int i = 0; i < x->readlen; i++) {
-        SETFLOAT(out+i, x->buf[i]);
-    }
-    outlet_float(x->readstatus, 2);
-    outlet_list(x->bytes_out, NULL, x->readlen, out);
-
-    polling:
     clock_delay(x->hidclock, x->polltime);
 }
 
@@ -282,7 +274,7 @@ void hidraw_setup(void)
     class_addmethod(hidraw_class, (t_method)hidraw_listhids, gensym("listdevices"), 0);
     class_addmethod(hidraw_class, (t_method)hidraw_opendevice, gensym("open"), A_FLOAT, 0);
     class_addmethod(hidraw_class, (t_method)hidraw_opendevice_vidpid, gensym("open-vidpid"), A_FLOAT, A_FLOAT, 0);
-    class_addmethod(hidraw_class, (t_method)hidraw_send, gensym("send"), A_GIMME, 0);
+    class_addmethod(hidraw_class, (t_method)hidraw_write, gensym("write"), A_GIMME, 0);
     class_addmethod(hidraw_class, (t_method)hidraw_poll, gensym("poll"), A_FLOAT, 0);
     class_addmethod(hidraw_class, (t_method)hidraw_closedevice, gensym("close"), 0);
 
