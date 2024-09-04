@@ -83,7 +83,7 @@
 #X text 617 379 open-vidpid <float> <float>;
 #X text 617 399 close;
 #X text 617 419 poll <float>;
-#X text 617 439 send <list> (for output reports);
+#X text 617 439 write <list> (for output reports);
 #X connect 0 0 22 0;
 #X connect 1 0 46 0;
 #X connect 2 0 0 0;
