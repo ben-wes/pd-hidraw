@@ -197,17 +197,16 @@ static void hidraw_tick(t_hidraw *x)
     int readlen_last = x->readlen;
     x->readlen = hid_read(x->handle, x->buf, sizeof(x->buf));
 
-    if (x->readlen < 0) { // error
-        if (readlen_last >= 0) pd_error(x, "hidraw: can't read(): %ls. still polling.", hid_error(x->handle));
-        outlet_float(x->readstatus, -1);
-    } else if (x->readlen == 0) { // waiting...
-        outlet_float(x->readstatus, 1);
-    } else {
+    if (x->readlen > 0) { // success
         for(int i = 0; i < x->readlen; i++) SETFLOAT(out+i, x->buf[i]);
         outlet_float(x->readstatus, 2);
         outlet_list(x->bytes_out, NULL, x->readlen, out);
-    }
-
+    } else if (x->readlen == 0) { // waiting...
+        outlet_float(x->readstatus, 1);
+    } else { // error
+        if (readlen_last >= 0) pd_error(x, "hidraw: can't read(): %ls. still polling.", hid_error(x->handle));
+        outlet_float(x->readstatus, -1);
+    } 
     clock_delay(x->hidclock, x->polltime);
 }
 
