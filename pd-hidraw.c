@@ -260,7 +260,7 @@ static void hidraw_describe(t_hidraw *x)
 
     if (x->readlen > 0) { // success
         for(int i = 0; i < x->readlen; i++) SETFLOAT(out+i, x->buf[i]);
-        outlet_list(x->bytes_out, NULL, x->readlen, out); 
+        outlet_list(x->bytes_out, NULL, x->readlen, out);
     } else { // error
         pd_error(x, "hidraw: can't get descriptor: %ls", hid_error(x->handle));
     }
