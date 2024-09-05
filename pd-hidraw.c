@@ -114,7 +114,7 @@ static void hidraw_parse_descriptor(t_hidraw *x)
                 return;
             }
         }
-        pd_error(x, "hidraw: no output report definition found″");
+        post(x, "hidraw: no output report definition found");
     } else {
         pd_error(x, "hidraw: can't get descriptor: %ls", hid_error(x->handle));
     }
