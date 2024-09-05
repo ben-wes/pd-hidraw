@@ -34,13 +34,18 @@
 #define HIDRAW_BUGFIX_VERSION 0
 
 #define MAXHIDS 50
+#define MAXSTR 255
+#define BUFSIZE 256
 
 typedef struct _hidraw {
     t_object  x_obj;
     struct hid_device_info *devs;
     unsigned short targetPID;
     unsigned short targetVID;
-    unsigned char buf[256];
+    unsigned char buf[BUFSIZE];
+    int outReportID;
+    int outReportSize;
+    wchar_t wstr[MAXSTR];
     char *hidpath[MAXHIDS];
     char *targetpath;
     int readlen;
@@ -83,6 +88,35 @@ static void print_devices(struct hid_device_info *cur_dev, t_hidraw *x)
     }
 }
 
+static void hidraw_parse_descriptor(t_hidraw *x)
+{
+    if (!x->handle) {
+        pd_error(x, "hidraw: no device opened yet");
+        return;
+    }
+
+    // candidate values
+    int outReportID = 0;
+    int outReportSize = 0;
+
+    x->readlen = hid_get_report_descriptor(x->handle, x->buf, sizeof(x->buf));
+    if (x->readlen > 0) {
+        for (int i=0; i < x->readlen-1; i++){
+            if (x->buf[i] == 0x85) outReportID = x->buf[i+1]; // following byte is report id
+            if (x->buf[i] == 0x95) outReportSize = x->buf[i+1]; // following byte is report size
+            if (x->buf[i] == 0x91) { // use first detected output report definition
+                x->outReportID = outReportID;
+                x->outReportSize = outReportSize;
+                post("hidraw: suspected output report id: %d, length: %d", x->outReportID, x->outReportSize);
+                return;
+            }
+        }
+        pd_error(x, "hidraw: no output report definition found″");
+    } else {
+        pd_error(x, "hidraw: can't get descriptor: %ls", hid_error(x->handle));
+    }
+}
+
 static void hidraw_open(t_hidraw *x, char openmode)
 {
     if (x->handle){
@@ -106,13 +140,18 @@ static void hidraw_open(t_hidraw *x, char openmode)
         return;
     }
 
-    post("hidraw: successfully opened the device");
+    // Read the Product String
+    x->wstr[0] = 0x0000;
+    x->readlen = hid_get_product_string(x->handle, x->wstr, MAXSTR);
+    if (x->readlen >= 0) post("hidraw: successfully opened device: %ls", x->wstr);
+    else post("hidraw: successfully opened nameless device");
 
     // Set the hid_read() function to be non-blocking.
     hid_set_nonblocking(x->handle, 1);
+    hidraw_parse_descriptor(x);
 
-    // Set up buffers.
-    memset(x->buf,0x00,sizeof(x->buf));
+    // // Set up buffers.
+    // memset(x->buf,0x00,sizeof(x->buf));
 }
 
 static void hidraw_closedevice(t_hidraw *x)
@@ -189,7 +228,7 @@ static void hidraw_describe(t_hidraw *x)
 {
     t_atom out[256];
 
-    if (!x->handle){
+    if (!x->handle) {
         pd_error(x, "hidraw: no device opened yet");
         return;
     }
@@ -198,11 +237,9 @@ static void hidraw_describe(t_hidraw *x)
 
     if (x->readlen > 0) { // success
         for(int i = 0; i < x->readlen; i++) SETFLOAT(out+i, x->buf[i]);
-        outlet_float(x->readstatus, 2);
         outlet_list(x->bytes_out, NULL, x->readlen, out); 
     } else { // error
         pd_error(x, "hidraw: can't get descriptor: %ls", hid_error(x->handle));
-        outlet_float(x->readstatus, -1);
     }
 }
 
