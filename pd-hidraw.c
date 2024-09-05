@@ -38,11 +38,13 @@
 #define BUFSIZE 256
 
 typedef struct _hidraw {
-    t_object  x_obj;
+    t_object x_obj;
     struct hid_device_info *devs;
     unsigned short targetPID;
     unsigned short targetVID;
     unsigned char buf[BUFSIZE];
+    unsigned char *write_buf; // separate buffer for writing
+    int write_size;
     int outReportID;
     int outReportSize;
     wchar_t wstr[MAXSTR];
@@ -55,10 +57,10 @@ typedef struct _hidraw {
     hid_device *handle;
     t_outlet *bytes_out, *readstatus;
     t_clock *hidclock;
+    t_clock *write_clock; // clock for write scheduling
 } t_hidraw;
 
 t_class *hidraw_class;
-
 
 static void print_device(struct hid_device_info *cur_dev)
 {
@@ -102,6 +104,7 @@ static void hidraw_parse_descriptor(t_hidraw *x)
     x->readlen = hid_get_report_descriptor(x->handle, x->buf, sizeof(x->buf));
     if (x->readlen > 0) {
         for (int i=0; i < x->readlen-1; i++){
+            // based on https://eleccelerator.com/usbdescreqparser/
             if (x->buf[i] == 0x85) outReportID = x->buf[i+1]; // following byte is report id
             if (x->buf[i] == 0x95) outReportSize = x->buf[i+1]; // following byte is report size
             if (x->buf[i] == 0x91) { // use first detected output report definition
@@ -204,23 +207,45 @@ static void hidraw_poll(t_hidraw *x, t_float f )
     else clock_unset(x->hidclock);
 }
 
-static void hidraw_write(t_hidraw *x, t_symbol *s, int ac, t_atom *av)
-{
-    if (!x->handle){
+// performs actual HID write, called by clock
+static void hidraw_do_write(t_hidraw *x) {
+    if (!x->handle) {
         pd_error(x, "hidraw: no device opened yet");
         return;
     }
 
-    for (int i = 0; i < ac; i++) {
-        x->buf[i] = (char)atom_getint(av);
-        av++;
-    }
-
-    x->readlen = hid_send_output_report(x->handle, x->buf, ac);
-
-    if (x->readlen < 0) {
+    int res = hid_send_output_report(x->handle, x->write_buf, x->write_size);
+    if (res < 0) {
         pd_error(x, "hidraw: unable to write: %ls", hid_error(x->handle));
     }
+
+    freebytes(x->write_buf, x->write_size);
+    x->write_buf = NULL;
+    x->write_size = 0;
+}
+
+static void hidraw_write(t_hidraw *x, t_symbol *s, int ac, t_atom *av) {
+    if (!x->handle) {
+        pd_error(x, "hidraw: no device opened yet");
+        return;
+    }
+
+    // allocate buffer for write data
+    unsigned char *write_buf = (unsigned char *)getbytes(ac * sizeof(unsigned char));
+    if (!write_buf) {
+        pd_error(x, "hidraw: memory allocation failed for write buffer");
+        return;
+    }
+
+    for (int i = 0; i < ac; i++) {
+        write_buf[i] = (unsigned char)atom_getint(av + i);
+    }
+
+    x->write_buf = write_buf;
+    x->write_size = ac;
+
+    clock_delay(x->write_clock, 0);
+
     (void)s;
 }
 
@@ -287,10 +312,14 @@ static void hidraw_free(t_hidraw *x) {
     if (x->handle){
         hid_close(x->handle);
     }
+    if (x->write_buf) {
+        freebytes(x->write_buf, x->write_size);
+    }
+
     clock_free(x->hidclock);
+    clock_free(x->write_clock);
     hid_exit();
 }
-
 
 // this is commented out because it is incompatible with not so old Pds
 /*
@@ -308,6 +337,7 @@ static void *hidraw_new(void)
     t_hidraw *x = (t_hidraw *)pd_new(hidraw_class);
 
     x->hidclock = clock_new(x, (t_method)hidraw_tick);
+    x->write_clock = clock_new(x, (t_method)hidraw_do_write);
 
     x->bytes_out = outlet_new(&x->x_obj, &s_list);
     x->readstatus = outlet_new(&x->x_obj, &s_float);
@@ -315,6 +345,8 @@ static void *hidraw_new(void)
     x->ndevices = 0;
     x->devlistdone = 0;
     x->handle = NULL;
+    x->write_buf = NULL;
+    x->write_size = 0;
     x->targetpath = getbytes(256);
 
     return (void *)x;
