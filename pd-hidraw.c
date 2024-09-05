@@ -109,12 +109,12 @@ static void hidraw_parse_descriptor(t_hidraw *x)
             if (x->buf[i] == 0x95) outReportSize = x->buf[i+1]; // following byte is report size
             if (x->buf[i] == 0x91) { // use first detected output report definition
                 x->outReportID = outReportID;
-                x->outReportSize = outReportSize;
-                post("hidraw: suspected specs for writing valid output reports: id %d, length %d", x->outReportID, x->outReportSize);
+                x->outReportSize = outReportSize + 1; // adding 1 to consider report id
+                post("hidraw: suspected specs for writing output reports: id %d, size %d (with id)", x->outReportID, x->outReportSize);
                 return;
             }
         }
-        post(x, "hidraw: no output report definition found");
+        post("hidraw: no output report definition found");
     } else {
         pd_error(x, "hidraw: can't get descriptor: %ls", hid_error(x->handle));
     }
@@ -144,10 +144,10 @@ static void hidraw_open(t_hidraw *x, char openmode)
     x->wstr[0] = 0x0000;
     x->readlen = hid_get_product_string(x->handle, x->wstr, MAXSTR);
 
-    if (x->readlen >= 0) {
+    if (x->readlen > 0) {
         post("hidraw: successfully opened device: %ls", x->wstr);
     } else {
-        post("hidraw: successfully opened nameless device");
+        post("hidraw: successfully opened device");
     }
 
     // Set the hid_read() function to be non-blocking.
@@ -223,7 +223,7 @@ static void hidraw_do_write(t_hidraw *x) {
     x->write_size = 0;
 }
 
-static void hidraw_write(t_hidraw *x, t_symbol *s, int ac, t_atom *av) {
+static inline void hidraw_write(t_hidraw *x, t_symbol *s, int ac, t_atom *av) {
     if (!x->handle) {
         pd_error(x, "hidraw: no device opened yet");
         return;
@@ -236,15 +236,28 @@ static void hidraw_write(t_hidraw *x, t_symbol *s, int ac, t_atom *av) {
         return;
     }
 
-    for (int i = 0; i < ac; i++)
-        write_buf[i] = (unsigned char)atom_getint(av + i);
-
+    for (int i = 0; i < ac; i++) write_buf[i] = (unsigned char)atom_getint(av + i);
     x->write_buf = write_buf;
     x->write_size = ac;
 
     clock_delay(x->write_clock, 0);
 
     (void)s;
+}
+
+static void hidraw_writesafe(t_hidraw *x, t_symbol *s, int ac, t_atom *av) {
+    if (ac != x->outReportSize) {
+        pd_error(x, "hidraw: report size doesn't match. expected %d, received %d", x->outReportSize, ac);
+        return;
+    }
+    
+    int id = atom_getint(av);
+    if (id != x->outReportID) {
+        pd_error(x, "hidraw: report ID doesn't match. expected %d, received %d", x->outReportID, id);
+        return;
+    }
+
+    hidraw_write(x, s, ac, av);
 }
 
 static void hidraw_describe(t_hidraw *x)
@@ -366,7 +379,8 @@ void hidraw_setup(void)
     class_addmethod(hidraw_class, (t_method)hidraw_listhids, gensym("listdevices"), 0);
     class_addmethod(hidraw_class, (t_method)hidraw_opendevice, gensym("open"), A_FLOAT, 0);
     class_addmethod(hidraw_class, (t_method)hidraw_opendevice_vidpid, gensym("open-vidpid"), A_FLOAT, A_FLOAT, 0);
-    class_addmethod(hidraw_class, (t_method)hidraw_write, gensym("write"), A_GIMME, 0);
+    class_addmethod(hidraw_class, (t_method)hidraw_writesafe, gensym("write"), A_GIMME, 0);
+    class_addmethod(hidraw_class, (t_method)hidraw_write, gensym("writeunsafe"), A_GIMME, 0);
     class_addmethod(hidraw_class, (t_method)hidraw_describe, gensym("describe"), 0);
     class_addmethod(hidraw_class, (t_method)hidraw_poll, gensym("poll"), A_FLOAT, 0);
     class_addmethod(hidraw_class, (t_method)hidraw_closedevice, gensym("close"), 0);
