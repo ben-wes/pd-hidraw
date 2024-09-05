@@ -180,12 +180,33 @@ static void hidraw_write(t_hidraw *x, t_symbol *s, int ac, t_atom *av)
     x->readlen = hid_send_output_report(x->handle, x->buf, ac);
 
     if (x->readlen < 0) {
-        pd_error(x, "hidraw: unable to write(): %ls", hid_error(x->handle));
+        pd_error(x, "hidraw: unable to write: %ls", hid_error(x->handle));
     }
     (void)s;
 }
 
-static void hidraw_tick(t_hidraw *x)
+static void hidraw_describe(t_hidraw *x)
+{
+    t_atom out[256];
+
+    if (!x->handle){
+        pd_error(x, "hidraw: no device opened yet");
+        return;
+    }
+
+    x->readlen = hid_get_report_descriptor(x->handle, x->buf, sizeof(x->buf));
+
+    if (x->readlen > 0) { // success
+        for(int i = 0; i < x->readlen; i++) SETFLOAT(out+i, x->buf[i]);
+        outlet_float(x->readstatus, 2);
+        outlet_list(x->bytes_out, NULL, x->readlen, out); 
+    } else { // error
+        pd_error(x, "hidraw: can't get descriptor: %ls", hid_error(x->handle));
+        outlet_float(x->readstatus, -1);
+    }
+}
+
+static void hidraw_read(t_hidraw *x)
 {
     t_atom out[256];
 
@@ -204,9 +225,14 @@ static void hidraw_tick(t_hidraw *x)
     } else if (x->readlen == 0) { // waiting...
         outlet_float(x->readstatus, 1);
     } else { // error
-        if (readlen_last >= 0) pd_error(x, "hidraw: can't read(): %ls. still polling.", hid_error(x->handle));
+        if (readlen_last >= 0) pd_error(x, "hidraw: can't read: %ls. still polling ...", hid_error(x->handle));
         outlet_float(x->readstatus, -1);
-    } 
+    }
+}
+
+static void hidraw_tick(t_hidraw *x)
+{
+    hidraw_read(x);
     clock_delay(x->hidclock, x->polltime);
 }
 
@@ -224,6 +250,7 @@ static void hidraw_free(t_hidraw *x) {
         hid_close(x->handle);
     }
     clock_free(x->hidclock);
+    hid_exit();
 }
 
 
@@ -270,10 +297,13 @@ void hidraw_setup(void)
                    0);
 
     //class_setfreefn(hidraw_class, hidraw_cleanup); // I prefer to not do this as it is incompatible with not so old Pds.
+    class_addbang(hidraw_class, hidraw_read);
+    class_addmethod(hidraw_class, (t_method)hidraw_read, gensym("read"), 0);
     class_addmethod(hidraw_class, (t_method)hidraw_listhids, gensym("listdevices"), 0);
     class_addmethod(hidraw_class, (t_method)hidraw_opendevice, gensym("open"), A_FLOAT, 0);
     class_addmethod(hidraw_class, (t_method)hidraw_opendevice_vidpid, gensym("open-vidpid"), A_FLOAT, A_FLOAT, 0);
     class_addmethod(hidraw_class, (t_method)hidraw_write, gensym("write"), A_GIMME, 0);
+    class_addmethod(hidraw_class, (t_method)hidraw_describe, gensym("describe"), 0);
     class_addmethod(hidraw_class, (t_method)hidraw_poll, gensym("poll"), A_FLOAT, 0);
     class_addmethod(hidraw_class, (t_method)hidraw_closedevice, gensym("close"), 0);
 
