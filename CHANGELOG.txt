@@ -1,5 +1,14 @@
 Changelog for pd-hidraw
 
+v0.2.1, dated 05-09-2024
+- rename "send" to "write"
+- add "read" and "bang" for manual polling
+- add "describe" to output report descriptor
+- parse output report id and size from descriptor
+- make "write" non-blocking through clock scheduling
+- validate output reports against given id and size
+- add "writeunsafe" method to skip validation
+
 v0.2.0, dated 03-09-2024
 - workflows for 64bit Pds
 - update hidapi submodule
