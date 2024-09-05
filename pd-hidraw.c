@@ -110,7 +110,7 @@ static void hidraw_parse_descriptor(t_hidraw *x)
             if (x->buf[i] == 0x91) { // use first detected output report definition
                 x->outReportID = outReportID;
                 x->outReportSize = outReportSize;
-                post("hidraw: suspected output report id: %d, length: %d", x->outReportID, x->outReportSize);
+                post("hidraw: suspected specs for writing valid output reports: id %d, length %d", x->outReportID, x->outReportSize);
                 return;
             }
         }
@@ -125,16 +125,13 @@ static void hidraw_open(t_hidraw *x, char openmode)
     if (x->handle){
         hid_close(x->handle);
         x->handle = NULL;
-        post("hidraw: closing previously opened device ...");
+        post("hidraw: closed previously opened device");
     }
 
     if (openmode) {
-        // Open the device using the VID, PID,
-        // and optionally the Serial number.
-        x->handle = hid_open(x->targetVID, x->targetPID, NULL);
+        x->handle = hid_open(x->targetVID, x->targetPID, NULL); // open using VID, PID
     } else {
-        // Open the device using the path
-        x->handle = hid_open_path(x->targetpath);
+        x->handle = hid_open_path(x->targetpath); // open using path through enum
     }
 
     if (!x->handle) {
@@ -146,8 +143,12 @@ static void hidraw_open(t_hidraw *x, char openmode)
     // Read the Product String
     x->wstr[0] = 0x0000;
     x->readlen = hid_get_product_string(x->handle, x->wstr, MAXSTR);
-    if (x->readlen >= 0) post("hidraw: successfully opened device: %ls", x->wstr);
-    else post("hidraw: successfully opened nameless device");
+
+    if (x->readlen >= 0) {
+        post("hidraw: successfully opened device: %ls", x->wstr);
+    } else {
+        post("hidraw: successfully opened nameless device");
+    }
 
     // Set the hid_read() function to be non-blocking.
     hid_set_nonblocking(x->handle, 1);
@@ -173,11 +174,11 @@ static void hidraw_opendevice(t_hidraw *x, t_float hidn)
     if (n == 0) {
         hidraw_closedevice(x);
         return;
-    } else if (!x->devlistdone) {
-        pd_error(x, "hidraw: devices not listed yet.");
-        return;
     } else if (n > x->ndevices) {
         pd_error(x, "hidraw: device out range. current count of devices is: %d", x->ndevices);
+        return;
+    } else if (!x->devlistdone) {
+        pd_error(x, "hidraw: devices not listed yet");
         return;
     } else {
         x->targetpath = (char *)x->hidpath[n];
@@ -215,9 +216,7 @@ static void hidraw_do_write(t_hidraw *x) {
     }
 
     int res = hid_send_output_report(x->handle, x->write_buf, x->write_size);
-    if (res < 0) {
-        pd_error(x, "hidraw: unable to write: %ls", hid_error(x->handle));
-    }
+    if (res < 0) pd_error(x, "hidraw: unable to write: %ls", hid_error(x->handle));
 
     freebytes(x->write_buf, x->write_size);
     x->write_buf = NULL;
@@ -237,9 +236,8 @@ static void hidraw_write(t_hidraw *x, t_symbol *s, int ac, t_atom *av) {
         return;
     }
 
-    for (int i = 0; i < ac; i++) {
+    for (int i = 0; i < ac; i++)
         write_buf[i] = (unsigned char)atom_getint(av + i);
-    }
 
     x->write_buf = write_buf;
     x->write_size = ac;
@@ -254,7 +252,7 @@ static void hidraw_describe(t_hidraw *x)
     t_atom out[BUFSIZE];
 
     if (!x->handle) {
-        pd_error(x, "hidraw: no device opened yet");
+        pd_error(x, "hidraw: can't read descriptor: no device opened yet");
         return;
     }
 
@@ -273,7 +271,7 @@ static int hidraw_read(t_hidraw *x)
     t_atom out[BUFSIZE];
 
     if (!x->handle){
-        pd_error(x, "hidraw: no device opened yet");
+        pd_error(x, "hidraw: can't read: no device opened yet");
         return 0;
     }
 
@@ -309,12 +307,8 @@ static void hidraw_pdversion(void)
 
 static void hidraw_free(t_hidraw *x) {
 
-    if (x->handle){
-        hid_close(x->handle);
-    }
-    if (x->write_buf) {
-        freebytes(x->write_buf, x->write_size);
-    }
+    if (x->handle) hid_close(x->handle);
+    if (x->write_buf) freebytes(x->write_buf, x->write_size);
 
     clock_free(x->hidclock);
     clock_free(x->write_clock);
