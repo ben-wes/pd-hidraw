@@ -226,7 +226,7 @@ static void hidraw_write(t_hidraw *x, t_symbol *s, int ac, t_atom *av)
 
 static void hidraw_describe(t_hidraw *x)
 {
-    t_atom out[256];
+    t_atom out[BUFSIZE];
 
     if (!x->handle) {
         pd_error(x, "hidraw: no device opened yet");
@@ -243,13 +243,13 @@ static void hidraw_describe(t_hidraw *x)
     }
 }
 
-static void hidraw_read(t_hidraw *x)
+static int hidraw_read(t_hidraw *x)
 {
-    t_atom out[256];
+    t_atom out[BUFSIZE];
 
     if (!x->handle){
         pd_error(x, "hidraw: no device opened yet");
-        return;
+        return 0;
     }
 
     int readlen_last = x->readlen;
@@ -265,12 +265,13 @@ static void hidraw_read(t_hidraw *x)
         if (readlen_last >= 0) pd_error(x, "hidraw: can't read: %ls. still polling ...", hid_error(x->handle));
         outlet_float(x->readstatus, -1);
     }
+    return 1;
 }
 
 static void hidraw_tick(t_hidraw *x)
 {
-    hidraw_read(x);
-    clock_delay(x->hidclock, x->polltime);
+    if (hidraw_read(x))
+        clock_delay(x->hidclock, x->polltime);
 }
 
 static void hidraw_pdversion(void)
