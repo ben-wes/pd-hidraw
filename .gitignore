@@ -10,3 +10,4 @@
 *.d_i386
 *.d_arm64
 *.d_fat
+.DS_Store

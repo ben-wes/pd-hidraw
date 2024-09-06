@@ -1,6 +1,6 @@
 /* pd-hidraw.c
  * By Lucas Cordiviola <lucarda27@hotmail.com> 2022
- * send message added by Ben Wesch 2024
+ * write mechanisms added by Ben Wesch 2024
 */
 
 #include <stdio.h>
@@ -40,13 +40,13 @@
 typedef struct _hidraw {
     t_object x_obj;
     struct hid_device_info *devs;
-    unsigned short targetPID;
-    unsigned short targetVID;
+    unsigned short target_pid;
+    unsigned short target_vid;
     unsigned char buf[BUFSIZE];
     unsigned char *write_buf; // separate buffer for writing
     int write_size;
-    int outReportID;
-    int outReportSize;
+    int out_report_id;
+    int out_report_size;
     wchar_t wstr[MAXSTR];
     char *hidpath[MAXHIDS];
     char *targetpath;
@@ -79,14 +79,17 @@ static void print_devices(struct hid_device_info *cur_dev, t_hidraw *x)
 
     while (cur_dev) {
         post("-----------\nPd device enum: %d", i);
-        post("device VID PID (shown in decimal notation): %d %d", cur_dev->vendor_id,
-            cur_dev->product_id);
-        x->hidpath[i] = getbytes(strlen(cur_dev->path)+1);
-        strcpy((char *)x->hidpath[i], cur_dev->path);
-        x->ndevices = i;
-        i++;
+        post("device VID PID (shown in decimal notation): %d %d", cur_dev->vendor_id, cur_dev->product_id);
+        x->hidpath[i-1] = getbytes(strlen(cur_dev->path) + 1);
+        strcpy((char *)x->hidpath[i-1], cur_dev->path);
         print_device(cur_dev);
         cur_dev = cur_dev->next;
+        x->ndevices = i;
+
+        if (++i > MAXHIDS) {
+            post("hidraw: maximum number of HID devices (%d) reached. some devices may not be listed.", x->ndevices);
+            break;
+        }
     }
 }
 
@@ -98,19 +101,19 @@ static void hidraw_parse_descriptor(t_hidraw *x)
     }
 
     // candidate values
-    int outReportID = 0;
-    int outReportSize = 0;
+    int out_report_id = 0;
+    int out_report_size = 0;
 
     x->readlen = hid_get_report_descriptor(x->handle, x->buf, sizeof(x->buf));
     if (x->readlen > 0) {
         for (int i=0; i < x->readlen-1; i++){
             // based on https://eleccelerator.com/usbdescreqparser/
-            if (x->buf[i] == 0x85) outReportID = x->buf[i+1]; // following byte is report id
-            if (x->buf[i] == 0x95) outReportSize = x->buf[i+1]; // following byte is report size
+            if (x->buf[i] == 0x85) out_report_id = x->buf[i+1]; // following byte is report id
+            if (x->buf[i] == 0x95) out_report_size = x->buf[i+1]; // following byte is report size
             if (x->buf[i] == 0x91) { // use first detected output report definition
-                x->outReportID = outReportID;
-                x->outReportSize = outReportSize + 1; // adding 1 to consider report id
-                post("hidraw: suspected specs for writing output reports: id %d, size %d (with id)", x->outReportID, x->outReportSize);
+                x->out_report_id = out_report_id;
+                x->out_report_size = out_report_size + 1; // adding 1 to consider report id
+                post("hidraw: suspected specs for writing output reports: id %d, size %d (with id)", x->out_report_id, x->out_report_size);
                 return;
             }
         }
@@ -129,7 +132,7 @@ static void hidraw_open(t_hidraw *x, char openmode)
     }
 
     if (openmode) {
-        x->handle = hid_open(x->targetVID, x->targetPID, NULL); // open using VID, PID
+        x->handle = hid_open(x->target_vid, x->target_pid, NULL); // open using VID, PID
     } else {
         x->handle = hid_open_path(x->targetpath); // open using path through enum
     }
@@ -140,21 +143,21 @@ static void hidraw_open(t_hidraw *x, char openmode)
         return;
     }
 
-    // Read the Product String
+    // read the product string
     x->wstr[0] = 0x0000;
     x->readlen = hid_get_product_string(x->handle, x->wstr, MAXSTR);
 
-    if (x->readlen > 0) {
+    if (x->wstr[0] > 0) {
         post("hidraw: successfully opened device: %ls", x->wstr);
     } else {
         post("hidraw: successfully opened device");
     }
 
-    // Set the hid_read() function to be non-blocking.
+    // set the hid_read() function to be non-blocking.
     hid_set_nonblocking(x->handle, 1);
     hidraw_parse_descriptor(x);
 
-    // // Set up buffers.
+    // // set up buffers.
     // memset(x->buf,0x00,sizeof(x->buf));
 }
 
@@ -180,16 +183,15 @@ static void hidraw_opendevice(t_hidraw *x, t_float hidn)
     } else if (!x->devlistdone) {
         pd_error(x, "hidraw: devices not listed yet");
         return;
-    } else {
-        x->targetpath = (char *)x->hidpath[n];
-        hidraw_open(x, 0);
     }
+    x->targetpath = (char *)x->hidpath[n-1];
+    hidraw_open(x, 0);
 }
 
 static void hidraw_opendevice_vidpid(t_hidraw *x, t_float vid, t_float pid)
 {
-    x->targetVID = (unsigned short) vid;
-    x->targetPID = (unsigned short) pid;
+    x->target_vid = (unsigned short) vid;
+    x->target_pid = (unsigned short) pid;
     hidraw_open(x, 1);
 }
 
@@ -246,14 +248,14 @@ static inline void hidraw_write(t_hidraw *x, t_symbol *s, int ac, t_atom *av) {
 }
 
 static void hidraw_writesafe(t_hidraw *x, t_symbol *s, int ac, t_atom *av) {
-    if (ac != x->outReportSize) {
-        pd_error(x, "hidraw: report size doesn't match. expected %d, received %d", x->outReportSize, ac);
+    if (ac != x->out_report_size) {
+        pd_error(x, "hidraw: report size doesn't match. expected %d, received %d", x->out_report_size, ac);
         return;
     }
     
     int id = atom_getint(av);
-    if (id != x->outReportID) {
-        pd_error(x, "hidraw: report ID doesn't match. expected %d, received %d", x->outReportID, id);
+    if (id != x->out_report_id) {
+        pd_error(x, "hidraw: report ID doesn't match. expected %d, received %d", x->out_report_id, id);
         return;
     }
 
