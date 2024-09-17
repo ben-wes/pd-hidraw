@@ -62,35 +62,84 @@ typedef struct _hidraw {
 
 t_class *hidraw_class;
 
-static void print_device(struct hid_device_info *cur_dev)
+static void hidraw_device_info(t_hidraw *x, t_float id)
 {
-    post("\n\n  type: %04hx %04hx\n  path: %s\n  serial_number: %ls", cur_dev->vendor_id, cur_dev->product_id, cur_dev->path, cur_dev->serial_number);
-    post("  Manufacturer: %ls", cur_dev->manufacturer_string);
-    post("  Product:      %ls", cur_dev->product_string);
-    post("  Release:      %hx", cur_dev->release_number);
-    post("  Interface:    %d",  cur_dev->interface_number);
-    post("  Usage (page): 0x%hx (0x%hx)", cur_dev->usage, cur_dev->usage_page);
-    post(" ");
+    int device_id = (int)id;
+
+    if (device_id < 1 || device_id > x->ndevices) {
+        post("hidraw: invalid device ID. Please provide a valid ID from the list.");
+        return;
+    }
+
+    struct hid_device_info *cur_dev;
+    cur_dev = x->devs;
+    int i = 1;
+
+    while (cur_dev && i < device_id) {
+        cur_dev = cur_dev->next;
+        i++;
+    }
+
+    if (!cur_dev) {
+        post("hidraw: unable to find device %d", device_id);
+        return;
+    }
+
+    post("\nDetailed information for device %d:", device_id);
+    post("    VendorID ProductID: %04hx %04hx", cur_dev->vendor_id, cur_dev->product_id);
+    post("    Path:               %s", cur_dev->path);
+    post("    Serial Number:      %ls", cur_dev->serial_number);
+    post("    Manufacturer:       %ls", cur_dev->manufacturer_string);
+    post("    Product:            %ls", cur_dev->product_string);
+    post("    Release:            %hx", cur_dev->release_number);
+    post("    Interface:          %d", cur_dev->interface_number);
+    post("    Usage:              0x%hx", cur_dev->usage);
+    post("    Usage Page:         0x%hx\n", cur_dev->usage_page);
 }
 
-static void print_devices(struct hid_device_info *cur_dev, t_hidraw *x)
+static void hidraw_listhids(t_hidraw *x)
 {
-    int i = 1; // start enumeration from 1 to use 0 as closedevice()
+    struct hid_device_info *cur_dev;
+    int i = 1; // start enumeration from 1
 
+    x->devs = hid_enumerate(0x0, 0x0);
+    if (!x->devs) {
+        post("hidraw: no HID devices available.");
+        return;
+    }
+
+    cur_dev = x->devs;
+
+    post("\nhidraw: enumerated HID devices:");
     while (cur_dev) {
-        post("-----------\nPd device enum: %d", i);
-        post("device VID PID (shown in decimal notation): %d %d", cur_dev->vendor_id, cur_dev->product_id);
-        x->hidpath[i-1] = getbytes(strlen(cur_dev->path) + 1);
-        strcpy((char *)x->hidpath[i-1], cur_dev->path);
-        print_device(cur_dev);
+        x->hidpath[i - 1] = getbytes(strlen(cur_dev->path) + 1);
+        if (x->hidpath[i - 1] == NULL) {
+            post("hidraw: failed to allocate memory for device path.");
+            hid_free_enumeration(x->devs);
+            return;
+        }
+
+        strcpy((char *)x->hidpath[i - 1], cur_dev->path);
+
+        wchar_t *manufacturer = (cur_dev->manufacturer_string && wcslen(cur_dev->manufacturer_string) > 0) ? cur_dev->manufacturer_string : L"n/a";
+        wchar_t *product = (cur_dev->product_string && wcslen(cur_dev->product_string) > 0) ? cur_dev->product_string : L"n/a";
+
+        if (cur_dev->vendor_id == 0 && cur_dev->product_id == 0) {
+            post("    %2d: %ls %ls", i, manufacturer, product);
+        } else {
+            post("    %2d: %ls %ls - VID PID: %d %d", i, manufacturer, product, cur_dev->vendor_id, cur_dev->product_id);
+        }
+
         cur_dev = cur_dev->next;
         x->ndevices = i;
 
         if (++i > MAXHIDS) {
-            post("hidraw: maximum number of HID devices (%d) reached. some devices may not be listed.", x->ndevices);
+            post("hidraw: maximum number of HID devices (%d) reached. Some devices may not be listed.", x->ndevices);
             break;
         }
     }
+
+    x->devlistdone = 1;
 }
 
 static void hidraw_parse_descriptor(t_hidraw *x)
@@ -195,14 +244,6 @@ static void hidraw_opendevice_vidpid(t_hidraw *x, t_float vid, t_float pid)
     hidraw_open(x, 1);
 }
 
-static void hidraw_listhids(t_hidraw *x)
-{
-    x->devs = hid_enumerate(0x0, 0x0);
-    print_devices(x->devs, x);
-    hid_free_enumeration(x->devs);
-    x->devlistdone = 1;
-}
-
 static void hidraw_poll(t_hidraw *x, t_float f )
 {
     x->polltime = f;
@@ -281,7 +322,7 @@ static void hidraw_describe(t_hidraw *x)
     }
 }
 
-static int hidraw_read(t_hidraw *x)
+static inline int hidraw_read(t_hidraw *x)
 {
     t_atom out[BUFSIZE];
 
@@ -314,10 +355,8 @@ static void hidraw_tick(t_hidraw *x)
 
 static void hidraw_pdversion(void)
 {
-    post("---");
-    post("  hidraw v%d.%d.%d", HIDRAW_MAJOR_VERSION, HIDRAW_MINOR_VERSION, HIDRAW_BUGFIX_VERSION);
-    post("  hidapi v%d.%d.%d", HID_API_VERSION_MAJOR, HID_API_VERSION_MINOR, HID_API_VERSION_PATCH);
-    post("---");
+    post("\n  hidraw v%d.%d.%d", HIDRAW_MAJOR_VERSION, HIDRAW_MINOR_VERSION, HIDRAW_BUGFIX_VERSION);
+    post(  "  hidapi v%d.%d.%d\n", HID_API_VERSION_MAJOR, HID_API_VERSION_MINOR, HID_API_VERSION_PATCH);
 }
 
 static void hidraw_free(t_hidraw *x) {
@@ -325,6 +364,7 @@ static void hidraw_free(t_hidraw *x) {
     if (x->handle) hid_close(x->handle);
     if (x->write_buf) freebytes(x->write_buf, x->write_size);
 
+    hid_free_enumeration(x->devs);
     clock_free(x->hidclock);
     clock_free(x->write_clock);
     hid_exit();
@@ -379,6 +419,8 @@ void hidraw_setup(void)
     class_addbang(hidraw_class, hidraw_read);
     class_addmethod(hidraw_class, (t_method)hidraw_read, gensym("read"), 0);
     class_addmethod(hidraw_class, (t_method)hidraw_listhids, gensym("listdevices"), 0);
+    class_addmethod(hidraw_class, (t_method)hidraw_listhids, gensym("scan"), 0);
+    class_addmethod(hidraw_class, (t_method)hidraw_device_info, gensym("info"), A_FLOAT, 0);
     class_addmethod(hidraw_class, (t_method)hidraw_opendevice, gensym("open"), A_FLOAT, 0);
     class_addmethod(hidraw_class, (t_method)hidraw_opendevice_vidpid, gensym("open-vidpid"), A_FLOAT, A_FLOAT, 0);
     class_addmethod(hidraw_class, (t_method)hidraw_writesafe, gensym("write"), A_GIMME, 0);
